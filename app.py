@@ -1469,14 +1469,21 @@ def dashboard():
     })
 
 
-# ==================== 数据库初始化 ====================
-def init_default_data():
-    """初始化默认数据"""
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    # 禁用外键约束以避免问题
+    conn.execute('PRAGMA foreign_keys = OFF')
+    return conn
+
+
+def init_db():
+    """初始化数据库"""
     os.makedirs(os.path.join(BASE_DIR, 'db'), exist_ok=True)
     conn = get_db()
     
-    # 创建表
-    conn.executescript('''
+    # 创建表（不使用外键约束，避免问题）
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS materials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mat_no TEXT UNIQUE NOT NULL,
@@ -1488,8 +1495,10 @@ def init_default_data():
             max_stock REAL DEFAULT 0,
             location TEXT,
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
-        );
-        
+        )
+    ''')
+    
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS warehouses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -1499,8 +1508,10 @@ def init_default_data():
             tel TEXT,
             status TEXT DEFAULT 'active',
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
-        );
-        
+        )
+    ''')
+    
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS locations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             warehouse_id INTEGER,
@@ -1509,10 +1520,11 @@ def init_default_data():
             zone TEXT,
             capacity REAL DEFAULT 0,
             status TEXT DEFAULT 'active',
-            created_at TEXT DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
-        );
-        
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    ''')
+    
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS suppliers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE,
@@ -1522,8 +1534,10 @@ def init_default_data():
             address TEXT,
             status TEXT DEFAULT 'active',
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
-        );
-        
+        )
+    ''')
+    
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS customers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE,
@@ -1533,8 +1547,10 @@ def init_default_data():
             address TEXT,
             status TEXT DEFAULT 'active',
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
-        );
-        
+        )
+    ''')
+    
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             batch_no TEXT UNIQUE NOT NULL,
@@ -1544,21 +1560,21 @@ def init_default_data():
             expire_date TEXT,
             quantity REAL DEFAULT 0,
             status TEXT DEFAULT 'active',
-            created_at TEXT DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (mat_id) REFERENCES materials(id),
-            FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
-        );
-        
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    ''')
+    
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS batch_inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             batch_id INTEGER,
             location_id INTEGER,
             quantity REAL DEFAULT 0,
-            updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (batch_id) REFERENCES batches(id),
-            FOREIGN KEY (location_id) REFERENCES locations(id)
-        );
-        
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    ''')
+    
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS inventory_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             type TEXT NOT NULL,
@@ -1573,46 +1589,51 @@ def init_default_data():
             ref_id INTEGER,
             operator TEXT,
             remark TEXT,
-            created_at TEXT DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (mat_id) REFERENCES materials(id),
-            FOREIGN KEY (batch_id) REFERENCES batches(id),
-            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
-        );
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
     ''')
     
     # 添加默认数据
     mat_count = conn.execute('SELECT COUNT(*) as c FROM materials').fetchone()['c']
     if mat_count == 0:
         # 默认物料
-        materials = [
-            ('MAT001', '螺丝 M8x30', '紧固件', '件', 'GB/T 70.1', 100, 1000),
-            ('MAT002', '轴承 6205', '轴承', '个', 'GB/T 276', 50, 500),
-            ('MAT003', '润滑油 5L', '润滑剂', '桶', '美孚DTE22', 20, 200),
-        ]
-        for m in materials:
-            conn.execute('INSERT INTO materials (mat_no, name, category, unit, spec, min_stock, max_stock) VALUES (?,?,?,?,?,?,?)', m)
+        conn.execute("INSERT INTO materials (mat_no, name, category, unit, spec, min_stock, max_stock) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    ('MAT001', '螺丝 M8x30', '紧固件', '件', 'GB/T 70.1', 100, 1000))
+        conn.execute("INSERT INTO materials (mat_no, name, category, unit, spec, min_stock, max_stock) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    ('MAT002', '轴承 6205', '轴承', '个', 'GB/T 276', 50, 500))
+        conn.execute("INSERT INTO materials (mat_no, name, category, unit, spec, min_stock, max_stock) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    ('MAT003', '润滑油 5L', '润滑剂', '桶', '美孚DTE22', 20, 200))
         
         # 默认仓库
-        conn.execute("INSERT INTO warehouses (name, code, address, manager) VALUES ('原材料仓库', 'WH01', '厂区A栋1楼', '张三')")
-        conn.execute("INSERT INTO warehouses (name, code, address, manager) VALUES ('成品仓库', 'WH02', '厂区B栋2楼', '李四')")
+        conn.execute("INSERT INTO warehouses (name, code, address, manager) VALUES (?, ?, ?, ?)",
+                    ('原材料仓库', 'WH01', '厂区A栋1楼', '张三'))
+        conn.execute("INSERT INTO warehouses (name, code, address, manager) VALUES (?, ?, ?, ?)",
+                    ('成品仓库', 'WH02', '厂区B栋2楼', '李四'))
         
         # 默认库位
-        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (1, 'A01-01', 'A区01排01位', 'A区')")
-        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (1, 'A01-02', 'A区01排02位', 'A区')")
-        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (1, 'B02-01', 'B区02排01位', 'B区')")
-        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (2, 'C01-01', '成品C区01位', 'C区')")
+        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (?, ?, ?, ?)",
+                    (1, 'A01-01', 'A区01排01位', 'A区'))
+        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (?, ?, ?, ?)",
+                    (1, 'A01-02', 'A区01排02位', 'A区'))
+        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (?, ?, ?, ?)",
+                    (1, 'B02-01', 'B区02排01位', 'B区'))
+        conn.execute("INSERT INTO locations (warehouse_id, location_code, location_name, zone) VALUES (?, ?, ?, ?)",
+                    (2, 'C01-01', '成品C区01位', 'C区'))
         
         # 默认供应商
-        conn.execute("INSERT INTO suppliers (code, name, contact, tel) VALUES ('SUP001', '五金配件供应商', '王五', '13800138001')")
+        conn.execute("INSERT INTO suppliers (code, name, contact, tel) VALUES (?, ?, ?, ?)",
+                    ('SUP001', '五金配件供应商', '王五', '13800138001'))
         
         conn.commit()
-        print('  默认数据已初始化')
     
     conn.close()
 
 
+# 启动时初始化数据库
+init_db()
+
+
 if __name__ == '__main__':
-    init_default_data()
     print('=' * 50)
     print('  物料出入库智能化管理系统 v2.0')
     print('  访问地址: http://localhost:5000')
