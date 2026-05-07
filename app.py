@@ -1,9 +1,11 @@
 import sqlite3
 import json
+import traceback
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 import os
+import sys
 
 app = Flask(__name__)
 CORS(app)
@@ -12,11 +14,27 @@ DB_PATH = os.path.join(BASE_DIR, 'db', 'factory_erp.db')
 
 DEFAULT_USER = '默认用户'
 
+# 打印路径信息用于调试
+print(f"BASE_DIR: {BASE_DIR}", file=sys.stderr)
+print(f"DB_PATH: {DB_PATH}", file=sys.stderr)
+
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}", file=sys.stderr)
+        raise
+
+
+# 全局错误处理器
+@app.errorhandler(500)
+def handle_500(e):
+    print(f"500 Error: {e}", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
+    return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 def gen_no(prefix):
@@ -1570,6 +1588,18 @@ def init_db():
             batch_id INTEGER,
             location_id INTEGER,
             quantity REAL DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    ''')
+    
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS inventory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mat_id INTEGER,
+            warehouse_id INTEGER,
+            location_id INTEGER,
+            quantity REAL DEFAULT 0,
+            locked_qty REAL DEFAULT 0,
             updated_at TEXT DEFAULT (datetime('now', 'localtime'))
         )
     ''')
